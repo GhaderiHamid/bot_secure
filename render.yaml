@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: bot_secure_docker
+    env: docker
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: 8083735904:AAHZwVrqViCnjiC5M-n81-6Rme4mmUnx8bM
+      - key: WEBHOOK_SECRET_PATH
+        value: super-secret-webhook-xyz7
+      - key: RENDER_SERVICE_NAME
+        value: bot_secure01
+      - key: DB_HOST
+        value: services.irn12.chabokan.net
+      - key: DB_PORT
+        value: 5899
+      - key: DB_NAME
+        value: joan
+      - key: DB_USER
+        value: root
+      - key: DB_PASSWORD
+        value: r6oerSHeFeqhvYcZ
+      - key: PAYMENT_SERVICE_URL
+        value: https://pcstore.liara.run/payment
