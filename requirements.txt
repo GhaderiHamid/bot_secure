@@ -1,10 +1,7 @@
-python-telegram-bot==20.6
+python-telegram-bot[webhooks]==20.6
 Flask==2.3.2
 mysql-connector-python==8.3.0
 bcrypt==4.1.2
 requests==2.32.3
 jdatetime==4.1.1
 python-dotenv==1.0.1
-
-# فقط نسخه باینری برای جلوگیری از نصب dev
---only-binary=:all:
