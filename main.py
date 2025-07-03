@@ -3,7 +3,7 @@ import logging
 from flask import Flask, request
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, PicklePersistence, filters
+    MessageHandler, filters
 )
 from dotenv import load_dotenv
 
@@ -25,11 +25,8 @@ WEBHOOK_SECRET_PATH = os.getenv("WEBHOOK_SECRET_PATH")
 # پیکربندی لاگ
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# فعال‌سازی حافظه‌ی پایدار
-persistence = PicklePersistence(filepath="bot_data.pkl")
-
-# ساخت ربات با حافظه‌ی context پایدار
-bot_app = ApplicationBuilder().token(TOKEN).persistence(persistence).build()
+# ساخت ربات
+bot_app = ApplicationBuilder().token(TOKEN).build()
 
 # ⬇️ تعریف تمام handlerها
 bot_app.add_handler(CommandHandler("start", show_categories))

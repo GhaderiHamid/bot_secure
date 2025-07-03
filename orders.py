@@ -6,31 +6,24 @@ import jdatetime
 import logging
 
 async def show_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    session = context.application.user_data.get(user_id, {})
-
-    if not session.get("logged_in"):
+    if not context.user_data.get("logged_in"):
         await update.message.reply_text("🔐 ابتدا باید وارد شوید.")
         return
 
-    session["orders_page"] = 0
-    context.application.user_data[user_id] = session
+    context.user_data["orders_page"] = 0
     await send_orders_page(update, context, page=0)
 
 async def send_orders_page(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int):
     try:
-        user_id = update.effective_user.id
-        session = context.application.user_data.get(user_id, {})
-
-        email = session.get("user_email")
+        email = context.user_data.get("user_email")
         cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
         row = cursor.fetchone()
         if not row:
             await update.message.reply_text("❌ کاربر یافت نشد.")
             return
-        db_user_id = row[0]
+        user_id = row[0]
 
-        cursor.execute("SELECT id, status, created_at FROM orders WHERE user_id = %s ORDER BY id DESC", (db_user_id,))
+        cursor.execute("SELECT id, status, created_at FROM orders WHERE user_id = %s ORDER BY id DESC", (user_id,))
         orders = cursor.fetchall()
 
         if not orders:
@@ -85,7 +78,7 @@ async def send_orders_page(update: Update, context: ContextTypes.DEFAULT_TYPE, p
             ])
 
             await update.effective_chat.send_message(msg, reply_markup=reply_markup)
-            session.setdefault("order_images", {})[str(order_id)] = images
+            context.user_data.setdefault("order_images", {})[str(order_id)] = images
 
         # صفحه‌بندی
         nav_buttons = []
@@ -96,9 +89,6 @@ async def send_orders_page(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         if nav_buttons:
             await update.effective_chat.send_message("⬇️ پیمایش سفارش‌ها:", reply_markup=InlineKeyboardMarkup([nav_buttons]))
 
-        session["orders_page"] = page
-        context.application.user_data[user_id] = session
-
     except Exception as e:
         logging.error(f"[ORDERS ERROR] {e}")
         refresh_connection()
@@ -108,38 +98,36 @@ async def paginate_orders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = query.from_user.id
-    session = context.application.user_data.get(user_id, {})
-    page = session.get("orders_page", 0)
-
+    page = context.user_data.get("orders_page", 0)
     if query.data == "orders_next":
         page += 1
     elif query.data == "orders_prev" and page > 0:
         page -= 1
-
-    session["orders_page"] = page
-    context.application.user_data[user_id] = session
+    context.user_data["orders_page"] = page
     await send_orders_page(update, context, page)
 
 async def order_images(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = query.from_user.id
-    session = context.application.user_data.get(user_id, {})
-    order_id = query.data.split("_")[1]
-    images = session.get("order_images", {}).get(order_id)
+    try:
+        _, order_id = query.data.split("_")
+        images = context.user_data.get("order_images", {}).get(order_id)
 
-    if not images:
-        await query.message.reply_text("❌ تصویری برای این سفارش ذخیره نشده.")
-        return
+        if not images:
+            await query.message.reply_text("❌ تصویری برای این سفارش ذخیره نشده.")
+            return
 
-    for name, image_path in images:
-        try:
-            if image_path.startswith("http"):
-                await query.message.reply_photo(photo=image_path, caption=name)
-            else:
-                with open(f"public/{image_path}", "rb") as f:
-                    await query.message.reply_photo(photo=f, caption=name)
-        except:
-            await query.message.reply_text(f"{name}\n🚫 خطا در نمایش تصویر.")
+        for name, image_path in images:
+            try:
+                if image_path.startswith("http"):
+                    await query.message.reply_photo(photo=image_path, caption=name)
+                else:
+                    with open(f"public/{image_path}", "rb") as f:
+                        await query.message.reply_photo(photo=f, caption=name)
+            except:
+                await query.message.reply_text(f"{name}\n🚫 خطا در نمایش تصویر.")
+
+    except Exception as e:
+        logging.error(f"[ORDER IMAGE ERROR] {e}")
+        await query.message.reply_text("❌ خطا در نمایش تصاویر.")
