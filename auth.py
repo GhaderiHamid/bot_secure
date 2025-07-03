@@ -36,6 +36,8 @@ async def auth_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         elif state == STATES["LOGIN_PASSWORD"]:
             email = context.user_data.get("email")
             password = text
+
+            refresh_connection()
             cursor.execute("SELECT password FROM users WHERE email = %s", (email,))
             result = cursor.fetchone()
 
@@ -77,6 +79,7 @@ async def auth_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             email = context.user_data["email"]
             password = hash_password(context.user_data["password"])
 
+            refresh_connection()
             cursor.execute(
                 "INSERT INTO users (first_name, last_name, email, password, phone) VALUES (%s, %s, %s, %s, %s)",
                 (first, last, email, password, phone)
