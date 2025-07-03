@@ -25,6 +25,7 @@ async def start_register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def auth_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     state = context.user_data.get("state")
+    user_id = update.effective_user.id
 
     try:
         if state == STATES["LOGIN_EMAIL"]:
@@ -39,8 +40,10 @@ async def auth_message_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             result = cursor.fetchone()
 
             if result and check_password(password, result[0]):
-                context.user_data["logged_in"] = True
-                context.user_data["user_email"] = email
+                context.application.user_data[user_id] = {
+                    "logged_in": True,
+                    "user_email": email
+                }
                 await update.message.reply_text("✅ ورود موفقیت‌آمیز بود!")
             else:
                 await update.message.reply_text("❌ ایمیل یا رمز عبور اشتباه است.")

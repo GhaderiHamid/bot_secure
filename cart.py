@@ -13,13 +13,16 @@ async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if not context.user_data.get("logged_in"):
+    user_id = update.effective_user.id
+    session = context.application.user_data.get(user_id, {})
+
+    if not session.get("logged_in"):
         await query.message.reply_text("🔐 ابتدا باید وارد شوید.")
         return
 
     try:
         prod_id = int(query.data.replace("addcart_", ""))
-        cart = context.user_data.get("cart", {})
+        cart = session.get("cart", {})
         quantity = cart.get(prod_id, 0)
 
         cursor.execute("SELECT limited FROM products WHERE id = %s", (prod_id,))
@@ -34,19 +37,19 @@ async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         cart[prod_id] = quantity + 1
-        context.user_data["cart"] = cart
+        session["cart"] = cart
+        context.application.user_data[user_id] = session
 
-        # ذخیره رزرو در جدول reservations
-        cursor.execute("SELECT id FROM users WHERE email = %s", (context.user_data.get("user_email"),))
+        cursor.execute("SELECT id FROM users WHERE email = %s", (session.get("user_email"),))
         user_row = cursor.fetchone()
         if user_row:
-            user_id = user_row[0]
+            uid = user_row[0]
             now = datetime.now()
             cursor.execute("""
                 INSERT INTO reservations (user_id, product_id, quantity, reserved_at)
                 VALUES (%s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE quantity = %s, reserved_at = %s
-            """, (user_id, prod_id, quantity + 1, now, quantity + 1, now))
+            """, (uid, prod_id, quantity + 1, now, quantity + 1, now))
             db.commit()
 
         await query.message.reply_text("🛒 محصول به سبد خرید افزوده شد.")
@@ -57,11 +60,14 @@ async def add_to_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("❌ خطا در افزودن به سبد خرید.")
 
 async def show_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data.get("logged_in"):
+    user_id = update.effective_user.id
+    session = context.application.user_data.get(user_id, {})
+
+    if not session.get("logged_in"):
         await update.message.reply_text("🔐 ابتدا وارد شوید.")
         return
 
-    cart = context.user_data.get("cart", {})
+    cart = session.get("cart", {})
     if not cart:
         await update.message.reply_text("🧺 سبد خرید خالی است.")
         return
@@ -104,12 +110,16 @@ async def remove_from_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    user_id = update.effective_user.id
+    session = context.application.user_data.get(user_id, {})
+    cart = session.get("cart", {})
+
     try:
         prod_id = int(query.data.replace("removecart_", ""))
-        cart = context.user_data.get("cart", {})
         if prod_id in cart:
             del cart[prod_id]
-            context.user_data["cart"] = cart
+            session["cart"] = cart
+            context.application.user_data[user_id] = session
             await query.message.reply_text("🧹 محصول حذف شد.")
         else:
             await query.message.reply_text("⚠️ محصول در سبد یافت نشد.")
@@ -121,32 +131,35 @@ async def pay_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if not context.user_data.get("logged_in"):
+    user_id = update.effective_user.id
+    session = context.application.user_data.get(user_id, {})
+
+    if not session.get("logged_in"):
         await query.message.reply_text("🔐 ابتدا وارد شوید.")
         return
 
-    cart = context.user_data.get("cart", {})
+    cart = session.get("cart", {})
     if not cart:
         await query.message.reply_text("🧺 سبد خرید خالی است.")
         return
 
     try:
-        email = context.user_data.get("user_email")
+        email = session.get("user_email")
         cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
         user = cursor.fetchone()
         if not user:
             await query.message.reply_text("❌ کاربر یافت نشد.")
             return
-        user_id = user[0]
+        uid = user[0]
         subtotal = 0
         products = []
 
         for prod_id, qty in cart.items():
             cursor.execute("SELECT price, discount FROM products WHERE id = %s", (prod_id,))
-            price_row = cursor.fetchone()
-            if not price_row:
+            row = cursor.fetchone()
+            if not row:
                 continue
-            price, discount = price_row
+            price, discount = row
             subtotal += int(price * (1 - discount / 100)) * qty
             products.append({
                 "product_id": prod_id,
@@ -156,7 +169,7 @@ async def pay_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
             })
 
         payload = {
-            "user_id": user_id,
+            "user_id": uid,
             "subtotal": subtotal,
             "products": products,
             "chat_id": query.message.chat_id
@@ -171,12 +184,12 @@ async def pay_cart(update: Update, context: ContextTypes.DEFAULT_TYPE):
             markup = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔗 رفتن به پرداخت", url=link)]
             ])
-            del context.user_data["cart"]
+            session["cart"] = {}
+            context.application.user_data[user_id] = session
             await query.message.reply_text("برای پرداخت روی دکمه کلیک کنید:", reply_markup=markup)
         else:
             await query.message.reply_text(f"❌ خطا در دریافت لینک پرداخت: {data.get('error', 'نامشخص')}")
 
     except Exception as e:
         logging.error(f"[PAYMENT ERROR] {e}")
-        # refresh_db_connection()
         await query.message.reply_text("❌ خطا در ارسال به درگاه پرداخت.")
